@@ -1,140 +1,164 @@
 # ESP32 WiFi RC Car
 
-Revamped from your **043 – Obstacle-Avoiding Robot with L298N** sketch. Instead
-of driving itself around with an ultrasonic sensor, the car is now driven live
-from a phone or laptop over WiFi, through a game-style web app the ESP32
-hosts itself.
+A browser-controlled RC car built on an ESP32 + L298N motor driver. The ESP32
+hosts its own WiFi hotspot and a game-style control page — no router, no app,
+no internet required. Open a browser, connect, and drive.
 
-## What you get
+---
 
-- **Clean control** — a drag-anywhere virtual joystick (steering + speed in
-  one motion, like a mobile game control stick), plus a big STOP button.
-- **Connectivity** — the ESP32 creates its own WiFi hotspot and web server.
-  No home router, no app store, no internet needed: connect and open a page.
-- **Fail-safe** — if the phone disconnects, locks, or the page is closed, the
-  car stops itself automatically within ~0.4 s.
-- **Fun modes** (hamburger menu, top right):
-  1. **Reverse Mode** — flips every direction: forward↔backward and
-     left↔right, all at once. A red banner and a rotated direction ring make
-     it obvious the mode is active so nobody's confused mid-demo.
-  2. **Rainbow Mode** — the joystick, STOP button, and menu accents cycle
-     through soft rainbow colors continuously, purely for show. It never
-     touches how the car actually drives.
+## Features
 
-Both toggles are remembered (saved in the browser) between visits.
+- **Virtual joystick** — drag anywhere on the circle to steer and throttle simultaneously
+- **Steering Wheel Mode** — rotate an on-screen wheel to steer, hold Gas / Brake pedals (like Dr. Driving)
+- **Reverse Mode** — flips all directions at once; a red banner shows when active
+- **Rainbow Mode** — cycles the control buttons through colours (cosmetic only)
+- **Fail-safe** — motors stop automatically within 400 ms if the browser disconnects or the phone locks
+- **Status LED** — built-in LED blinks fast (no client) or slow (client connected)
+- **Single-file sketch** — the full web app is embedded in `ESP32_RC_Car.ino`; no second file needed
+
+---
 
 ## Hardware
 
-ESP32 Dev Board (WROOM-32) + L298N dual motor driver + 2 DC gear motors,
-same chassis as your original build. The ultrasonic sensor + servo from the
-original project are **not wired up** in this version — see
-[Bonus: bring back the sensor](#bonus-bring-back-the-sensor) if you'd like to
-keep it as an extra feature.
+| Component | Detail |
+|---|---|
+| ESP32 Dev Board | WROOM-32, 38-pin |
+| L298N Motor Driver | Standard breakout board |
+| DC Gear Motors × 2 | TT motors, 3–6 V |
+| Battery | 2× 18650 in series (~7.4 V) |
+| Chassis | 2WD acrylic kit with casters |
+| Wiring | Dupont male-to-female jumper wires |
 
-| L298N pin        | ESP32 GPIO | Purpose                     |
-|-------------------|:----------:|------------------------------|
-| IN1               | 27         | Left motor direction         |
-| IN2               | 26         | Left motor direction         |
-| IN3               | 25         | Right motor direction        |
-| IN4               | 33         | Right motor direction        |
-| ENA               | 14         | Left motor speed (PWM)       |
-| ENB               | 32         | Right motor speed (PWM)      |
-| GND               | GND        | Common ground — see below    |
+### GPIO assignments
 
-These GPIOs were deliberately picked to avoid every ESP32 boot-strapping pin
-(0, 2, 5, 12, 15), the flash pins (6–11), and the input-only pins (34–39), so
-there's no risk of a boot-mode conflict or bricking the board.
+| L298N pin | ESP32 GPIO | Purpose |
+|---|:---:|---|
+| IN1 | 27 | Left motor — forward |
+| IN2 | 26 | Left motor — backward |
+| IN3 | 25 | Right motor — forward |
+| IN4 | 33 | Right motor — backward |
+| ENA | 14 | Left motor speed (PWM) |
+| ENB | 32 | Right motor speed (PWM) |
+| GND | GND | Common ground — required |
 
-**Important wiring notes:**
-- **Remove the ENA and ENB jumpers** on the L298N board. Those jumpers tie
-  the enable pins permanently HIGH (always full speed); removing them lets
-  the ESP32's PWM signals actually control speed.
-- **Common ground**: ESP32 GND, L298N GND, and the motor battery's negative
-  terminal must all be tied together, even though the ESP32 is powered
-  separately (e.g. USB) from the motors.
-- **Logic power**: if your motor supply is 12 V or less, the L298N's onboard
-  5 V regulator (jumper in place) can power its own logic — you don't need
-  to feed it from the ESP32. If your motor supply is above 12V, remove that
-  regulator jumper and give the L298N's 5V logic pin its own 5V source.
-- ESP32 GPIOs output 3.3V logic. This reliably registers as HIGH on standard
-  L298N breakout boards (a very common pairing) — no level shifter needed.
+> **Before wiring:** remove the ENA and ENB jumpers from the L298N board.
+> These jumpers force full speed at all times — removing them lets PWM control work.
 
-## Libraries to install
+> **Common ground:** connect a wire from any ESP32 GND pin to the L298N GND terminal.
+> This is the most commonly missed step and causes motors to not respond.
 
-In the Arduino IDE: **Tools > Manage Libraries...**
+> **Powering the ESP32:** the L298N's onboard 5 V regulator output can power the ESP32
+> via its VIN pin when the battery is connected. During programming, use USB as normal.
 
-1. **ESPAsyncWebServer** — search for it, but confirm the listing is the
-   **ESP32Async** fork before installing. If it's not indexed on your IDE
-   yet, install it manually: download the ZIP from
-   https://github.com/ESP32Async/ESPAsyncWebServer and use
-   **Sketch > Include Library > Add .ZIP Library...**
-2. **AsyncTCP** — same author (ESP32Async). ZIP fallback:
-   https://github.com/ESP32Async/AsyncTCP
+---
 
-Both are actively maintained and Arduino-ESP32 core v3-compatible as of 2026;
-older forks (e.g. `me-no-dev`, `lacamera`) are outdated and can cause
-compile conflicts if installed alongside these — remove them if present.
+## Libraries
+
+Install both via **Tools > Manage Libraries** in Arduino IDE. The author must be **ESP32Async**:
+
+1. **ESPAsyncWebServer** — [github.com/ESP32Async/ESPAsyncWebServer](https://github.com/ESP32Async/ESPAsyncWebServer)
+2. **AsyncTCP** — [github.com/ESP32Async/AsyncTCP](https://github.com/ESP32Async/AsyncTCP)
+
+If they don't appear in search, download the ZIP and install via
+**Sketch > Include Library > Add .ZIP Library**.
+
+> Older forks (`me-no-dev`, `lacamera`) are outdated and will cause compile errors
+> if installed alongside these. Remove them if present.
+
+---
 
 ## Board setup
 
-- **Tools > Board**: "ESP32 Dev Module" (or your specific WROOM-32 board)
-- **Arduino-ESP32 core**: v3.x required (Boards Manager > esp32 > update if
-  you're on 2.x). The sketch uses the newer `ledcAttach()` / `ledcWrite()`
-  PWM API — a one-line swap is noted in a comment in the `.ino` if you're
-  stuck on core 2.x.
+- **Tools > Board:** ESP32 Arduino > **ESP32 Dev Module**
+- **Arduino-ESP32 core:** v3.x required (Boards Manager > esp32 > update if on 2.x)
+- **Boards Manager URL:** `https://dl.espressif.com/dl/package_esp32_index.json`
+
+The sketch uses the v3.x LEDC API (`ledcAttach` / `ledcWrite`). A note in the `.ino`
+shows the one-line change needed if you are stuck on core 2.x.
+
+---
 
 ## Flashing & first run
 
-1. Open `ESP32_RC_Car.ino` in the Arduino IDE. The web app's HTML/CSS/JS is
-   embedded directly in this one file (as `PAGE_HTML`) — no second tab or
-   extra file needed.
-2. Select your board + port, then **Upload**.
-3. Open the **Serial Monitor** at 115200 baud. You should see the hotspot IP
-   (normally `192.168.4.1`) print out.
-4. On your phone or laptop, connect to WiFi network **`ESP32-RC-Car`**
-   (password `rccar123` — change both in the `.ino` before your event if
-   you'd like something unique).
-5. Open a browser to **`http://192.168.4.1`** (or **`http://esp32car.local`**
-   on phones/computers that support mDNS/Bonjour — most modern iOS, macOS,
-   and Android devices do).
-6. Drag the joystick to drive. Tap **STOP** any time for an immediate halt.
+1. Open `ESP32_RC_Car.ino` in Arduino IDE 2.
+2. Select **ESP32 Dev Module** and the correct COM port.
+3. Click **Upload**. Hold the BOOT button on some boards if upload times out.
+4. Open **Serial Monitor** at **115200 baud** — you should see:
+   ```
+   ========================================
+     ESP32 WiFi RC Car — starting up
+   ========================================
+   Hotspot SSID : ESP32-RC-Car
+   Password     : rccar123
+   Hotspot IP   : 192.168.4.1
+   ```
+5. On your phone, connect to **ESP32-RC-Car** (password: `rccar123`).
+6. Open `http://192.168.4.1` in a browser. The connection overlay clears when the car is reachable.
+7. Drag the joystick to drive.
+
+---
+
+## Controls
+
+| Control | How |
+|---|---|
+| Joystick | Drag the circle — angle = turn, distance = speed |
+| Arrow keys | Keyboard fallback for desktop testing |
+| STOP button | Immediate full stop |
+| Reverse Mode | Hamburger menu (top right) → toggle |
+| Rainbow Mode | Hamburger menu → toggle |
+| Steering Wheel Mode | Hamburger menu → toggle, then rotate wheel + hold pedals |
+
+All three modes are saved in the browser and remembered between visits.
+
+---
 
 ## Tuning
 
-- **Top speed** feels off? The PWM duty is derived from the joystick's
-  distance from center (0–255). If your motors are very high-torque/fast,
-  you can cap it by scaling the computed PWM in `driveSide()` before calling
-  `ledcWrite()`.
-- **Car turns too sharply/gently**: adjust the mixing formula in
-  `driveFromJoystick()` — e.g. multiply the turn term (`x`) by 0.7 before
-  mixing to soften steering.
-- **Motors run backward from what you'd expect**: swap that side's two
-  direction wires at the L298N terminal (easier than touching code).
-- **AP password**: change `AP_PASSWORD` in the `.ino` — must be 8+ characters
-  for WPA2, or set it to `""` for an open network.
+- **Speed:** PWM duty runs 0–255 from joystick distance. Scale the value in `driveSide()`
+  to cap top speed if motors are too fast.
+- **Steering feel:** multiply the `x` turn term in `driveFromJoystick()` by e.g. `0.7`
+  to soften turning.
+- **Motor runs backward:** swap the two wires at the L298N terminal for that motor.
+  Do not change the code for this.
+- **WiFi credentials:** change `AP_SSID` and `AP_PASSWORD` in the `.ino`.
+  Password must be 8+ characters for WPA2.
 
-## Bonus: bring back the sensor
+---
 
-Your original build's ultrasonic sensor + servo aren't wired into this
-sketch, but they'd make a great extra "impress the judges" feature layered
-on top of manual control — e.g. an **auto-brake** that stops forward motion
-if something is closer than ~15 cm, without taking over steering. If you'd
-like that added, it's a small addition (NewPing + Servo libraries, one
-sensor read per loop, and a single check before `driveFromJoystick()` is
-allowed to drive forward) — just ask.
+## How it works
 
-## How it works, briefly
+The ESP32 runs a WiFi access point, a web server (serving the embedded HTML/CSS/JS
+page), and a WebSocket endpoint at `/ws`. The browser sends joystick position as a
+plain text `"x,y"` string (values –1 to 1) roughly 16 times per second. The ESP32
+mixes x (turn) and y (throttle) into left/right motor speeds using arcade-drive
+math, then drives the L298N with PWM signals.
 
-- The ESP32 runs both a small web server (serves the one HTML/CSS/JS page,
-  embedded as `PAGE_HTML` in the `.ino`) and a WebSocket endpoint (`/ws`)
-  for realtime control.
-- The web page sends its joystick position as a plain text `"x,y"` string
-  (each -1..1) about 16 times a second, whether or not the stick has moved —
-  that steady stream doubles as the connection heartbeat the fail-safe
-  relies on.
-- The ESP32 mixes `x` (turn) and `y` (throttle) into independent left/right
-  motor speeds (classic arcade-drive mixing), and drives the L298N directly.
-- **Reverse Mode** and **Rainbow Mode** are both handled entirely in the web
-  page's JavaScript — Reverse Mode just negates `x` and `y` before they're
-  sent, so the ESP32 firmware never needs to know a mode exists; Rainbow
-  Mode never talks to the ESP32 at all.
+The steady stream of messages also acts as a heartbeat — if nothing arrives for
+400 ms, the fail-safe fires and motors stop.
+
+Reverse Mode and Steering Wheel Mode are handled entirely in the browser's JavaScript.
+The ESP32 firmware receives the same `x,y` format regardless of which control mode
+is active and does not need to know about modes at all.
+
+---
+
+## Troubleshooting
+
+**Page won't load / connection overlay stays up**
+- Confirm phone is on ESP32-RC-Car, not home WiFi
+- Try `192.168.4.1` directly instead of `esp32car.local`
+- Check Serial Monitor shows "Server started"
+
+**Motors don't move**
+- Check common GND wire between ESP32 and L298N
+- Confirm ENA and ENB jumpers are removed
+- Verify battery is on and voltage is 7 V or above
+
+**Only one motor moves**
+- Re-tighten the terminal screw for the non-moving motor
+- Check IN3/IN4 and ENB wiring matches the GPIO table above
+
+**Board crashes or reboots**
+- Confirm Arduino-ESP32 core is v3.x, not 2.x
+- Ensure no boot-strapping pin (0, 2, 5, 12, 15) is driven externally at boot
